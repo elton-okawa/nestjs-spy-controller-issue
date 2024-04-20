@@ -11,8 +11,14 @@ import {
 import { KafkaContainer, StartedKafkaContainer } from '@testcontainers/kafka';
 import { TOPIC } from 'src/app.controller';
 import { lastValueFrom } from 'rxjs';
-import { sleep } from './helpers';
+import {
+  sleep,
+  initTestContainer,
+  createMicroservice,
+  produceEventAndWait,
+} from './helpers';
 import { NestFactory } from '@nestjs/core';
+import { AppService } from 'src/app.service';
 
 const SECONDS = 1000;
 jest.setTimeout(300 * SECONDS);
@@ -26,51 +32,13 @@ describe('AppController (e2e)', () => {
   let producer: ClientKafka;
 
   beforeEach(async () => {
-    console.log(
-      'Starting TestContainer, it might take a while. You can run "npm run test:e2e:debug" to see its logs',
-    );
-    kafkaContainer = await new KafkaContainer().withExposedPorts(PORT).start();
-    const brokerUrl = `${kafkaContainer.getHost()}:${kafkaContainer.getMappedPort(PORT)}`;
-    console.log(`Kafka started at "${brokerUrl}"`);
+    const testContainerSetup = await initTestContainer(PORT);
+    kafkaContainer = testContainerSetup.kafkaContainer;
 
-    // await sleep(60000);
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [
-        AppModule,
-        ClientsModule.register([
-          {
-            name: KAFKA_CLIENT_KEY,
-            transport: Transport.KAFKA,
-            options: {
-              client: {
-                clientId: 'test-producer',
-                brokers: [brokerUrl],
-              },
-              producer: {
-                allowAutoTopicCreation: true,
-              },
-              producerOnlyMode: true,
-            },
-          },
-        ]),
-      ],
-    })
-      .setLogger(new Logger())
-      .compile();
-
-    app = moduleFixture.createNestMicroservice<MicroserviceOptions>({
-      transport: Transport.KAFKA,
-      options: {
-        client: {
-          clientId: 'test-consumer',
-          brokers: [brokerUrl],
-        },
-        consumer: {
-          groupId: 'test-group-id',
-          allowAutoTopicCreation: true,
-        },
-      },
-    });
+    ({ app } = await createMicroservice({
+      kafkaClientKey: KAFKA_CLIENT_KEY,
+      brokerUrl: testContainerSetup.brokerUrl,
+    }));
 
     producer = app.get<ClientKafka>(KAFKA_CLIENT_KEY);
     await producer.connect();
@@ -84,13 +52,9 @@ describe('AppController (e2e)', () => {
     await kafkaContainer.stop();
   });
 
-  it('should spy controller handler', async () => {
-    await lastValueFrom(
-      producer.emit(TOPIC, {
-        value: 'test',
-      }),
-    );
+  it('should spy service instance', async () => {
+    await produceEventAndWait(producer);
 
-    await sleep(10000);
+    // expect(handlerSpy).toHaveBeenCalledTimes(1);
   });
 });
