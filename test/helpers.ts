@@ -20,6 +20,8 @@ import {
   waitForContainer,
 } from 'testcontainers';
 
+const PORT = 9094;
+const KAFKA_CLIENT_KEY = 'test-client';
 const logger = new Logger('E2E Test');
 
 export async function sleep(ms: number, reason: string) {
@@ -28,13 +30,22 @@ export async function sleep(ms: number, reason: string) {
   logger.log(`Finished waiting for "${reason}"`);
 }
 
+export async function setupTest() {
+  const testContainerSetup = await initTestContainer(PORT);
+  const kafkaContainer = testContainerSetup.kafkaContainer;
+
+  const { app, producer } = await createMicroservice({
+    kafkaClientKey: KAFKA_CLIENT_KEY,
+    brokerUrl: testContainerSetup.brokerUrl,
+  });
+
+  return { kafkaContainer, app, producer };
+}
+
 export async function initTestContainer(port: number) {
   logger.log(
     'Starting TestContainer, it might take a while. You can run "npm run test:e2e:debug" to see its logs',
   );
-  // const kafkaContainer = await new KafkaContainer()
-  //   .withExposedPorts(port)
-  //   .start();
   const kafkaContainer = await new GenericContainer('bitnami/kafka:3.6.2')
     .withEnvironment({
       KAFKA_CFG_NODE_ID: '0',
@@ -118,7 +129,13 @@ export async function createMicroservice({
     },
   });
 
-  return { app };
+  const producer = app.get<ClientKafka>(kafkaClientKey);
+  await producer.connect();
+
+  await app.listen();
+  await sleep(10000, 'workaround - nestjs starts before consumer joins');
+
+  return { app, producer };
 }
 
 export async function produceEventAndWait(producer: ClientKafka) {
