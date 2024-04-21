@@ -31,17 +31,38 @@ describe('AppController (e2e)', () => {
   let producer: ClientKafka;
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     await app.close();
     await producer.close();
     await kafkaContainer.stop();
   });
 
-  it('should spy service instance', async () => {
-    ({ app, producer, kafkaContainer } = await setupTest());
-    const handlerSpy = jest.spyOn(app.get<AppService>(AppService), 'handle');
+  describe('service', () => {
+    it('should spy service instance', async () => {
+      ({ app, producer, kafkaContainer } = await setupTest());
+      const handlerSpy = jest.spyOn(app.get<AppService>(AppService), 'handle');
 
-    await produceEventAndWait(producer);
+      await produceEventAndWait(producer, 'spy service instance');
 
-    expect(handlerSpy).toHaveBeenCalledTimes(1);
+      expect(handlerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should spy service prototype before init', async () => {
+      const handlerSpy = jest.spyOn(AppService.prototype, 'handle');
+      ({ app, producer, kafkaContainer } = await setupTest());
+
+      await produceEventAndWait(producer, 'spy service prototype before init');
+
+      expect(handlerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should spy service prototype after init', async () => {
+      ({ app, producer, kafkaContainer } = await setupTest());
+      const handlerSpy = jest.spyOn(AppService.prototype, 'handle');
+
+      await produceEventAndWait(producer, 'spy service prototype after init');
+
+      expect(handlerSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -138,11 +138,14 @@ export async function createMicroservice({
   return { app, producer };
 }
 
-export async function produceEventAndWait(producer: ClientKafka) {
+export async function produceEventAndWait(
+  producer: ClientKafka,
+  message: string,
+) {
   logger.log('Producing message...');
   await lastValueFrom(
     producer.emit(TOPIC, {
-      value: 'test',
+      value: message,
     }),
   );
   logger.log('Message produced successfully!');
