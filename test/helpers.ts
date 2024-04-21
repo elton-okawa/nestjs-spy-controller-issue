@@ -6,28 +6,20 @@ import {
   ClientKafka,
 } from '@nestjs/microservices';
 import { TestingModule, Test } from '@nestjs/testing';
-import { KafkaContainer } from '@testcontainers/kafka';
 import { Partitioners } from 'kafkajs';
 import { lastValueFrom } from 'rxjs';
 import { TOPIC } from 'src/app.controller';
 import { AppModule } from 'src/app.module';
-import {
-  BoundPorts,
-  GenericContainer,
-  StartedNetwork,
-  Wait,
-  getContainerRuntimeClient,
-  waitForContainer,
-} from 'testcontainers';
+import { GenericContainer, Wait } from 'testcontainers';
 
 const PORT = 9094;
 const KAFKA_CLIENT_KEY = 'test-client';
 const logger = new Logger('E2E Test');
 
 export async function sleep(ms: number, reason: string) {
-  logger.log(`Waiting "${reason}" for ${ms}ms...`);
+  logger.debug(`Waiting "${reason}" for ${ms}ms...`);
   await new Promise((resolve) => setTimeout(resolve, ms));
-  logger.log(`Finished waiting for "${reason}"`);
+  logger.debug(`Finished waiting for "${reason}"`);
 }
 
 export async function setupTest() {
@@ -43,7 +35,7 @@ export async function setupTest() {
 }
 
 export async function initTestContainer(port: number) {
-  logger.log(
+  logger.debug(
     'Starting TestContainer, it might take a while. You can run "npm run test:e2e:debug" to see its logs',
   );
   const kafkaContainer = await new GenericContainer('bitnami/kafka:3.6.2')
@@ -70,10 +62,10 @@ export async function initTestContainer(port: number) {
   if (exitCode !== 0) {
     throw new Error(`Failed to create topic (${exitCode}): "${output}"`);
   }
-  logger.log(`Topics created successfully!`);
+  logger.debug(`Topics created successfully!`);
 
   const brokerUrl = `${kafkaContainer.getHost()}:${kafkaContainer.getMappedPort(port)}`;
-  logger.log(`Kafka started at "${brokerUrl}"`);
+  logger.debug(`Kafka started at "${brokerUrl}"`);
 
   return { kafkaContainer, brokerUrl };
 }
@@ -142,13 +134,13 @@ export async function produceEventAndWait(
   producer: ClientKafka,
   message: string,
 ) {
-  logger.log('Producing message...');
+  logger.debug('Producing message...');
   await lastValueFrom(
     producer.emit(TOPIC, {
       value: message,
     }),
   );
-  logger.log('Message produced successfully!');
+  logger.debug('Message produced successfully!');
   await sleep(10000, 'message to be consumed');
-  logger.log('Message should be consumed at this point');
+  logger.debug('Message should be consumed at this point');
 }

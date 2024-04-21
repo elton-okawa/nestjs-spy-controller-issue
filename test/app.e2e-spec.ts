@@ -1,24 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, INestMicroservice, Logger } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from './../src/app.module';
-import {
-  ClientKafka,
-  ClientsModule,
-  MicroserviceOptions,
-  Transport,
-} from '@nestjs/microservices';
-import { KafkaContainer, StartedKafkaContainer } from '@testcontainers/kafka';
-import { TOPIC } from 'src/app.controller';
-import { lastValueFrom } from 'rxjs';
-import {
-  sleep,
-  initTestContainer,
-  createMicroservice,
-  produceEventAndWait,
-  setupTest,
-} from './helpers';
-import { NestFactory } from '@nestjs/core';
+import { INestMicroservice } from '@nestjs/common';
+import { ClientKafka } from '@nestjs/microservices';
+import { AppController } from 'src/app.controller';
+import { produceEventAndWait, setupTest } from './helpers';
 import { AppService } from 'src/app.service';
 import { StartedTestContainer } from 'testcontainers';
 
@@ -61,6 +44,44 @@ describe('AppController (e2e)', () => {
       const handlerSpy = jest.spyOn(AppService.prototype, 'handle');
 
       await produceEventAndWait(producer, 'spy service prototype after init');
+
+      expect(handlerSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('controller', () => {
+    it('should spy controller instance', async () => {
+      ({ app, producer, kafkaContainer } = await setupTest());
+      const handlerSpy = jest.spyOn(
+        app.get<AppController>(AppController),
+        'handle',
+      );
+
+      await produceEventAndWait(producer, 'spy controller instance');
+
+      expect(handlerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should spy controller prototype before init', async () => {
+      const handlerSpy = jest.spyOn(AppController.prototype, 'handle');
+      ({ app, producer, kafkaContainer } = await setupTest());
+
+      await produceEventAndWait(
+        producer,
+        'spy controller prototype before init',
+      );
+
+      expect(handlerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should spy controller prototype after init', async () => {
+      ({ app, producer, kafkaContainer } = await setupTest());
+      const handlerSpy = jest.spyOn(AppController.prototype, 'handle');
+
+      await produceEventAndWait(
+        producer,
+        'spy controller prototype after init',
+      );
 
       expect(handlerSpy).toHaveBeenCalledTimes(1);
     });
