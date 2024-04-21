@@ -19,16 +19,17 @@ import {
 } from './helpers';
 import { NestFactory } from '@nestjs/core';
 import { AppService } from 'src/app.service';
+import { StartedTestContainer } from 'testcontainers';
 
 const SECONDS = 1000;
 jest.setTimeout(300 * SECONDS);
 
-const PORT = 9093;
+const PORT = 9094;
 
 describe('AppController (e2e)', () => {
   const KAFKA_CLIENT_KEY = 'test-client';
   let app: INestMicroservice;
-  let kafkaContainer: StartedKafkaContainer;
+  let kafkaContainer: StartedTestContainer;
   let producer: ClientKafka;
 
   beforeEach(async () => {
@@ -44,6 +45,7 @@ describe('AppController (e2e)', () => {
     await producer.connect();
 
     await app.listen();
+    await sleep(10000, 'workaround - nestjs starts before consumer joins');
   });
 
   afterEach(async () => {

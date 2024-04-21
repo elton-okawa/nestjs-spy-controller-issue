@@ -7,25 +7,60 @@ import {
 } from '@nestjs/microservices';
 import { TestingModule, Test } from '@nestjs/testing';
 import { KafkaContainer } from '@testcontainers/kafka';
+import { Partitioners } from 'kafkajs';
 import { lastValueFrom } from 'rxjs';
 import { TOPIC } from 'src/app.controller';
 import { AppModule } from 'src/app.module';
-import { Wait } from 'testcontainers';
+import {
+  BoundPorts,
+  GenericContainer,
+  StartedNetwork,
+  Wait,
+  getContainerRuntimeClient,
+  waitForContainer,
+} from 'testcontainers';
 
 const logger = new Logger('E2E Test');
 
-export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export async function sleep(ms: number, reason: string) {
+  logger.log(`Waiting "${reason}" for ${ms}ms...`);
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  logger.log(`Finished waiting for "${reason}"`);
 }
 
 export async function initTestContainer(port: number) {
   logger.log(
     'Starting TestContainer, it might take a while. You can run "npm run test:e2e:debug" to see its logs',
   );
-  const kafkaContainer = await new KafkaContainer()
-    .withExposedPorts(port)
+  // const kafkaContainer = await new KafkaContainer()
+  //   .withExposedPorts(port)
+  //   .start();
+  const kafkaContainer = await new GenericContainer('bitnami/kafka:3.6.2')
+    .withEnvironment({
+      KAFKA_CFG_NODE_ID: '0',
+      KAFKA_CFG_PROCESS_ROLES: 'controller,broker',
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: '0@:9093',
+      KAFKA_CFG_LISTENERS: `PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:${port}`,
+      KAFKA_CFG_ADVERTISED_LISTENERS: `PLAINTEXT://kafkatest:9092,EXTERNAL://localhost:${port}`,
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP:
+        'CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT',
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: 'CONTROLLER',
+    })
+    .withExposedPorts({ container: port, host: port })
+    .withWaitStrategy(Wait.forLogMessage('Kafka Server started'))
     .start();
-  await sleep(20000); // wait for leader election
+
+  const { output, exitCode } = await kafkaContainer.exec(
+    `./kafka-topics.sh  --create --if-not-exists --topic ${TOPIC} --replication-factor=1 --partitions=1 --bootstrap-server localhost:${port}`.split(
+      ' ',
+    ),
+    { workingDir: '/opt/bitnami/kafka/bin/' },
+  );
+  if (exitCode !== 0) {
+    throw new Error(`Failed to create topic (${exitCode}): "${output}"`);
+  }
+  logger.log(`Topics created successfully!`);
+
   const brokerUrl = `${kafkaContainer.getHost()}:${kafkaContainer.getMappedPort(port)}`;
   logger.log(`Kafka started at "${brokerUrl}"`);
 
@@ -54,6 +89,7 @@ export async function createMicroservice({
               brokers: [brokerUrl],
             },
             producer: {
+              createPartitioner: Partitioners.DefaultPartitioner,
               allowAutoTopicCreation: true,
             },
             producerOnlyMode: true,
@@ -73,8 +109,11 @@ export async function createMicroservice({
         brokers: [brokerUrl],
       },
       consumer: {
-        groupId: 'test-group-id',
+        groupId: 'test-group',
         allowAutoTopicCreation: true,
+      },
+      producer: {
+        createPartitioner: Partitioners.DefaultPartitioner,
       },
     },
   });
@@ -90,8 +129,6 @@ export async function produceEventAndWait(producer: ClientKafka) {
     }),
   );
   logger.log('Message produced successfully!');
-
-  logger.log('Waiting message to be consumed...');
-  await sleep(10000);
+  await sleep(10000, 'message to be consumed');
   logger.log('Message should be consumed at this point');
 }
